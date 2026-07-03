@@ -174,7 +174,7 @@ impl TuiApp {
         let running_ref = Arc::clone(&self.currently_running_game);
         let game_title = game.title.clone();
         
-        let show_popup = !game.exe_path.starts_with("magnet:");
+        let show_popup = !game.exe_path.starts_with("magnet:") && !game.exe_path.starts_with("http://") && !game.exe_path.starts_with("https://");
         if show_popup {
             *running_ref.lock().unwrap() = Some(game_title);
         }

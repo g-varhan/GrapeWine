@@ -60,6 +60,55 @@ uninstall_grapewine() {
     fi
 }
 
+# Function to automatically append path to shell config if missing
+setup_shell_path() {
+    local shell_name
+    shell_name=$(basename "${SHELL:-bash}")
+    local config_file=""
+    local export_line='export PATH="$HOME/.local/bin:$PATH"'
+
+    if [[ ":$PATH:" == *":$HOME/.local/bin:"* ]]; then
+        echo -e "${GREEN}✓ $HOME/.local/bin is already in your PATH.${NC}"
+        return
+    fi
+
+    case "$shell_name" in
+        zsh)
+            config_file="$HOME/.zshrc"
+            ;;
+        bash)
+            config_file="$HOME/.bashrc"
+            ;;
+        fish)
+            config_file="$HOME/.config/fish/config.fish"
+            export_line='fish_add_path ~/.local/bin'
+            ;;
+        *)
+            if [ -f "$HOME/.zshrc" ]; then
+                config_file="$HOME/.zshrc"
+            elif [ -f "$HOME/.bashrc" ]; then
+                config_file="$HOME/.bashrc"
+            fi
+            ;;
+    esac
+
+    if [ -n "$config_file" ]; then
+        mkdir -p "$(dirname "$config_file")"
+        touch "$config_file"
+        
+        if ! grep -q "$export_line" "$config_file"; then
+            echo -e "\n# Added by GrapeWine installer" >> "$config_file"
+            echo "$export_line" >> "$config_file"
+            echo -e "${GREEN}✓ Successfully added PATH configuration to $config_file!${NC}"
+            echo -e "${YELLOW}Please restart your terminal or run: source $config_file${NC}"
+        else
+            echo -e "${GREEN}✓ PATH configuration already exists in $config_file.${NC}"
+        fi
+    else
+        echo -e "${YELLOW}Could not auto-detect shell config file. Please manually add $HOME/.local/bin to your PATH.${NC}"
+    fi
+}
+
 # Parse command line arguments
 if [ "${1:-}" = "--uninstall" ] || [ "${1:-}" = "-u" ] || [ "${1:-}" = "uninstall" ]; then
     uninstall_grapewine
@@ -137,6 +186,9 @@ cp "$SRC_BIN" "$DEST_BIN_GRAPE"
 cp "$SRC_BIN" "$DEST_BIN_GRAPEWINE"
 chmod +x "$DEST_BIN_GRAPE" "$DEST_BIN_GRAPEWINE"
 
+# Configure shell path
+setup_shell_path
+
 # Clean up temp directory if created
 if [ -n "$TEMP_BUILD_DIR" ]; then
     echo -e "Cleaning up temporary directory..."
@@ -152,11 +204,4 @@ echo -e "  or"
 echo -e "  ${YELLOW}grapewine${NC}"
 echo -e "\nTo uninstall GrapeWine at any time, run:"
 echo -e "  ${YELLOW}grapewine --uninstall${NC}"
-
-# Path check warning
-if [[ ":$PATH:" != *":$INSTALL_BIN_DIR:"* ]]; then
-    echo -e "\n${YELLOW}Warning: $INSTALL_BIN_DIR is not in your PATH environment variable.${NC}"
-    echo -e "Add this to your shell config file (e.g. ~/.bashrc or ~/.zshrc):"
-    echo -e "  ${BLUE}export PATH=\"\$HOME/.local/bin:\$PATH\"${NC}"
-fi
 echo ""

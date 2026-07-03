@@ -189,8 +189,8 @@ impl Orchestrator {
     pub fn launch_game(&self, config: &mut GameConfig) -> Result<(), String> {
         let game_id = &config.id;
 
-        // 1. Download and silent install loop if exe_path is a magnet link
-        if config.exe_path.starts_with("magnet:") {
+        // 1. Download and silent install loop if exe_path is a magnet link or HTTP direct URL
+        if config.exe_path.starts_with("magnet:") || config.exe_path.starts_with("http://") || config.exe_path.starts_with("https://") {
             config.status = "downloading".to_string();
             config.download_progress = 0.0;
             config.download_speed = "0.0 B/s".to_string();
