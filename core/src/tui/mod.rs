@@ -60,6 +60,7 @@ pub struct TuiApp {
     
     // Launching state
     currently_running_game: Arc<Mutex<Option<String>>>, // Contains title of playing game
+    installing_runner: Arc<Mutex<Option<f32>>>,
 }
 
 impl TuiApp {
@@ -82,6 +83,7 @@ impl TuiApp {
             palette_list_state: ListState::default(),
             
             currently_running_game: Arc::new(Mutex::new(None)),
+            installing_runner: Arc::new(Mutex::new(None)),
         };
         
         if !app.games.is_empty() {
@@ -224,6 +226,11 @@ impl TuiApp {
                         }
                     }
                 }
+                
+                if self.installing_runner.lock().unwrap().is_none() && self.orchestrator.runners.is_empty() {
+                    self.orchestrator.detect_runners();
+                }
+                
                 last_db_update = Instant::now();
             }
 
@@ -293,6 +300,25 @@ impl TuiApp {
                                 KeyCode::Char('3') => self.tab = ActiveTab::Runners,
                                 KeyCode::Char('4') => self.tab = ActiveTab::Plugins,
                                 KeyCode::Tab => self.tab = ActiveTab::Search,
+                                KeyCode::Char('r') | KeyCode::Char('R') => {
+                                    if self.orchestrator.runners.is_empty() && self.installing_runner.lock().unwrap().is_none() {
+                                        let progress_ref = Arc::clone(&self.installing_runner);
+                                        *progress_ref.lock().unwrap() = Some(0.0);
+                                        
+                                        std::thread::spawn(move || {
+                                            let mut orchestrator = Orchestrator::new();
+                                            let cb_progress = Arc::clone(&progress_ref);
+                                            let res = orchestrator.download_ge_proton(move |pct| {
+                                                *cb_progress.lock().unwrap() = Some(pct);
+                                            });
+                                            
+                                            *progress_ref.lock().unwrap() = None;
+                                            if let Err(e) = res {
+                                                println!("Failed to download Proton-GE: {}", e);
+                                            }
+                                        });
+                                    }
+                                }
                                 KeyCode::Up => {
                                     if let Some(idx) = self.game_list_state.selected() {
                                         if idx > 0 {
@@ -424,10 +450,55 @@ impl TuiApp {
         // Draw Tab Content
         match self.tab {
             ActiveTab::Home => {
-                let home_split = Layout::default()
-                    .direction(Direction::Horizontal)
-                    .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
-                    .split(main_chunks[1]);
+                if self.orchestrator.runners.is_empty() {
+                    let text = if let Some(pct) = *self.installing_runner.lock().unwrap() {
+                        let progress_width: usize = 30;
+                        let filled = ((pct / 100.0) * progress_width as f32) as usize;
+                        let empty = progress_width.saturating_sub(filled);
+                        let bar = format!("[{}{}]", "█".repeat(filled), "░".repeat(empty));
+                        
+                        vec![
+                            Line::from(""),
+                            Line::from(Span::styled("📦 Downloading GE-Proton Runner...", Style::default().fg(COLOR_PRIMARY).bold())),
+                            Line::from(""),
+                            Line::from(Span::styled(format!("Progress: {:.1}%", pct), Style::default().fg(COLOR_HIGHLIGHT))),
+                            Line::from(""),
+                            Line::from(Span::styled(bar, Style::default().fg(COLOR_PRIMARY))),
+                            Line::from(""),
+                            Line::from(Span::styled("Please wait while the download completes and extracts...", Style::default().fg(COLOR_MUTED))),
+                        ]
+                    } else {
+                        vec![
+                            Line::from(""),
+                            Line::from(Span::styled("⚠️ No Wine/Proton runner detected!", Style::default().fg(COLOR_HIGHLIGHT).bold())),
+                            Line::from(""),
+                            Line::from("GrapeWine requires a Wine or Proton runner to launch Windows games."),
+                            Line::from(""),
+                            Line::from(vec![
+                                Span::raw("Press "),
+                                Span::styled("[R]", Style::default().fg(COLOR_SUCCESS).bold()),
+                                Span::raw(" to automatically download and install GE-Proton locally."),
+                            ]),
+                            Line::from(""),
+                            Line::from(Span::styled("(It will be installed standalone to ~/.local/share/grapevine/runners)", Style::default().fg(COLOR_MUTED))),
+                        ]
+                    };
+                    
+                    let banner_p = Paragraph::new(text)
+                        .block(Block::default()
+                            .title(" Runner Dependency Missing ")
+                            .borders(Borders::ALL)
+                            .border_style(Style::default().fg(COLOR_HIGHLIGHT))
+                            .bg(COLOR_PANEL))
+                        .wrap(Wrap { trim: true })
+                        .alignment(ratatui::layout::Alignment::Center);
+                        
+                    f.render_widget(banner_p, main_chunks[1]);
+                } else {
+                    let home_split = Layout::default()
+                        .direction(Direction::Horizontal)
+                        .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
+                        .split(main_chunks[1]);
 
                 // Left: Game list
                 let game_items: Vec<ListItem> = self.games
@@ -531,6 +602,7 @@ impl TuiApp {
                     let details_p = Paragraph::new("No game selected.").block(details_block);
                     f.render_widget(details_p, home_split[1]);
                 }
+            }
             }
             ActiveTab::Search => {
                 let search_split = Layout::default()

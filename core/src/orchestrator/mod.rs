@@ -120,12 +120,13 @@ impl Orchestrator {
         let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
 
         // Paths where runners can be found
-        let runner_dirs = vec![
+        let mut runner_dirs = vec![
             home.join(".local").join("share").join("Steam").join("compatibilitytools.d"),
             home.join(".steam").join("root").join("compatibilitytools.d"),
             home.join(".local").join("share").join("bottles").join("runners"),
             PathBuf::from("/usr/share/steam/compatibilitytools.d"),
         ];
+        runner_dirs.push(self.base_dir.join("runners"));
 
         for dir in runner_dirs {
             if dir.exists() {
@@ -155,6 +156,78 @@ impl Orchestrator {
                 }
             }
         }
+    }
+
+    // Fetches latest GE-Proton from GitHub and installs it locally
+    pub fn download_ge_proton<F>(&mut self, progress_cb: F) -> Result<(), String>
+    where
+        F: Fn(f32) + Send + Sync + 'static,
+    {
+        let runners_dir = self.base_dir.join("runners");
+        let download_dir = runners_dir.join("download");
+        fs::create_dir_all(&download_dir)
+            .map_err(|e| format!("Failed to create download folder: {}", e))?;
+
+        // Query GitHub Releases API for latest GE-Proton release
+        let client = reqwest::blocking::Client::builder()
+            .user_agent("GrapeWine-Orchestrator")
+            .build()
+            .map_err(|e| format!("Failed to build reqwest client: {}", e))?;
+
+        let download_url = match client.get("https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases/latest").send() {
+            Ok(res) => {
+                if let Ok(json) = res.json::<serde_json::Value>() {
+                    let mut url = None;
+                    if let Some(assets) = json["assets"].as_array() {
+                        for asset in assets {
+                            if let Some(name) = asset["name"].as_str() {
+                                if name.ends_with(".tar.gz") {
+                                    url = asset["browser_download_url"].as_str().map(|s| s.to_string());
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    url
+                } else {
+                    None
+                }
+            }
+            Err(_) => None,
+        };
+
+        // Fallback to static release URL if API query fails (e.g. rate-limit)
+        let target_url = download_url.unwrap_or_else(|| {
+            "https://github.com/GloriousEggroll/proton-ge-custom/releases/download/GE-Proton9-5/GE-Proton9-5.tar.gz".to_string()
+        });
+
+        let progress_cb_arc = std::sync::Arc::new(progress_cb);
+        let cb_clone = progress_cb_arc.clone();
+
+        let archive_path = downloader::download_torrent(&target_url, &download_dir, move |progress| {
+            cb_clone(progress.percentage);
+        })?;
+
+        // Extract tarball using system commands
+        let status = Command::new("tar")
+            .arg("-xzf")
+            .arg(&archive_path)
+            .arg("-C")
+            .arg(&runners_dir)
+            .status()
+            .map_err(|e| format!("Failed to run tar extraction: {}", e))?;
+
+        if !status.success() {
+            return Err("Tar command failed to extract archive".to_string());
+        }
+
+        // Cleanup temporary download folder
+        let _ = fs::remove_dir_all(download_dir);
+
+        // Reload runners list
+        self.detect_runners();
+
+        Ok(())
     }
 
     // Prepares the Wine prefix and copies grapevine-helper.exe
