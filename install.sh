@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
-# GrapeWine Universal Installer Script
-# Installs the game orchestrator and binds the 'grape' / 'grapewine' commands.
+# GrapeWine Universal Installer & Uninstaller Script
+# Installs/Uninstalls the game orchestrator and binds the 'grape' / 'grapewine' commands.
 #
 set -euo pipefail
 
@@ -12,6 +12,61 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
+# File targets
+INSTALL_BIN_DIR="$HOME/.local/bin"
+DEST_BIN_GRAPE="$INSTALL_BIN_DIR/grape"
+DEST_BIN_GRAPEWINE="$INSTALL_BIN_DIR/grapewine"
+DATA_DIR="$HOME/.local/share/grapevine"
+
+# Function to perform uninstallation
+uninstall_grapewine() {
+    echo -e "${YELLOW}===================================================${NC}"
+    echo -e "${YELLOW}         Uninstalling GrapeWine...                 ${NC}"
+    echo -e "${YELLOW}===================================================${NC}"
+
+    local removed=0
+
+    if [ -f "$DEST_BIN_GRAPE" ]; then
+        echo -e "Removing executable: ${RED}$DEST_BIN_GRAPE${NC}"
+        rm -f "$DEST_BIN_GRAPE"
+        removed=1
+    fi
+
+    if [ -f "$DEST_BIN_GRAPEWINE" ]; then
+        echo -e "Removing executable: ${RED}$DEST_BIN_GRAPEWINE${NC}"
+        rm -f "$DEST_BIN_GRAPEWINE"
+        removed=1
+    fi
+
+    if [ -d "$DATA_DIR" ]; then
+        echo -e "\n${YELLOW}Found GrapeWine data directory containing prefixes & library database at:${NC}"
+        echo -e "  ${BLUE}$DATA_DIR${NC}"
+        
+        # Read reply (default to NO for safety to prevent losing games)
+        read -rp "Would you like to delete all game prefixes and configuration database? [y/N]: " confirm
+        if [[ "$confirm" =~ ^[Yy]$ ]]; then
+            echo -e "Removing data directory: ${RED}$DATA_DIR${NC}"
+            rm -rf "$DATA_DIR"
+            echo -e "${GREEN}✓ Data directory successfully deleted.${NC}"
+        else
+            echo -e "${GREEN}Keeping game prefixes and configuration database intact.${NC}"
+        fi
+    fi
+
+    if [ $removed -eq 1 ]; then
+        echo -e "\n${GREEN}✓ GrapeWine executables successfully uninstalled!${NC}"
+    else
+        echo -e "\n${YELLOW}No active GrapeWine installations found in $INSTALL_BIN_DIR.${NC}"
+    fi
+}
+
+# Parse command line arguments
+if [ "${1:-}" = "--uninstall" ] || [ "${1:-}" = "-u" ] || [ "${1:-}" = "uninstall" ]; then
+    uninstall_grapewine
+    exit 0
+fi
+
+# Standard Installation flow
 echo -e "${BLUE}===================================================${NC}"
 echo -e "${BLUE}          GrapeWine Universal Installer            ${NC}"
 echo -e "${BLUE}===================================================${NC}"
@@ -73,12 +128,9 @@ cargo build --release
 
 # 4. Installing Binary and Symlinks
 echo -e "\n${BLUE}[4/4] Installing executable files...${NC}"
-INSTALL_BIN_DIR="$HOME/.local/bin"
 mkdir -p "$INSTALL_BIN_DIR"
 
 SRC_BIN="$BUILD_PATH/target/release/grapevine"
-DEST_BIN_GRAPE="$INSTALL_BIN_DIR/grape"
-DEST_BIN_GRAPEWINE="$INSTALL_BIN_DIR/grapewine"
 
 echo -e "Copying binary to ${YELLOW}$DEST_BIN_GRAPE${NC} and ${YELLOW}$DEST_BIN_GRAPEWINE${NC}..."
 cp "$SRC_BIN" "$DEST_BIN_GRAPE"
@@ -98,6 +150,8 @@ echo -e "You can now start the launcher using either command:"
 echo -e "  ${YELLOW}grape${NC}"
 echo -e "  or"
 echo -e "  ${YELLOW}grapewine${NC}"
+echo -e "\nTo uninstall GrapeWine at any time, run:"
+echo -e "  ${YELLOW}grapewine --uninstall${NC}"
 
 # Path check warning
 if [[ ":$PATH:" != *":$INSTALL_BIN_DIR:"* ]]; then
