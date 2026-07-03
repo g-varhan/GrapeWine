@@ -1,0 +1,17 @@
+[package]
+name = "grapevine"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+ratatui = { version = "0.28", features = ["crossterm"] }
+crossterm = { version = "0.28", features = ["event-stream"] }
+mlua = { version = "0.9", features = ["lua54", "vendored"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+toml = "0.8"
+reqwest = { version = "0.12", features = ["json", "blocking"] }
+tokio = { version = "1.0", features = ["full"] }
+chrono = { version = "0.4", features = ["serde"] }
+dirs = "5.0"
+libc = "0.2"

@@ -1,0 +1,17 @@
+# Rust/Cargo
+/target/
+**/*.rs.bk
+Cargo.lock
+
+# Zig
+.zig-cache/
+zig-out/
+
+# GrapeVine cache & DB
+/core/library.json
+/core/cache.json
+
+# System / IDE
+.DS_Store
+.vscode/
+.idea/
