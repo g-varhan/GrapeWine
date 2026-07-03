@@ -148,11 +148,27 @@ fi
 echo -e "${GREEN}✓ Zig found: $(zig version)${NC}"
 
 # Check for aria2c (recommended)
-if ! command -v aria2c &> /dev/null; then
+if ! command -v aria2c &> /dev/null && [ ! -f "$HOME/.local/bin/aria2c" ]; then
     echo -e "${YELLOW}Warning: 'aria2c' not found on your system.${NC}"
-    echo -e "It is highly recommended to install 'aria2' via your package manager to support torrent downloads.${NC}"
+    echo -e "Downloading static 'aria2c' binary for Linux x86_64..."
+    
+    TEMP_ARIA_DIR=$(mktemp -d -t aria2-download-XXXXXX)
+    if curl -sSL "https://github.com/P3TERX/Aria2-Pro-Core/releases/download/1.36.0_2021.08.22/aria2-1.36.0-static-linux-amd64.tar.gz" -o "$TEMP_ARIA_DIR/aria2.tar.gz"; then
+        mkdir -p "$INSTALL_BIN_DIR"
+        tar -xzf "$TEMP_ARIA_DIR/aria2.tar.gz" -C "$TEMP_ARIA_DIR"
+        cp "$TEMP_ARIA_DIR/aria2c" "$INSTALL_BIN_DIR/aria2c"
+        chmod +x "$INSTALL_BIN_DIR/aria2c"
+        echo -e "${GREEN}✓ Statically installed aria2c to $INSTALL_BIN_DIR/aria2c${NC}"
+    else
+        echo -e "${RED}Failed to download static aria2c binary. Please install 'aria2' manually.${NC}"
+    fi
+    rm -rf "$TEMP_ARIA_DIR"
 else
-    echo -e "${GREEN}✓ aria2c found: $(aria2c --version | head -n 1)${NC}"
+    if command -v aria2c &> /dev/null; then
+        echo -e "${GREEN}✓ aria2c found globally: $(aria2c --version | head -n 1)${NC}"
+    else
+        echo -e "${GREEN}✓ aria2c found locally: $INSTALL_BIN_DIR/aria2c${NC}"
+    fi
 fi
 
 # 2. Setup Build Directory

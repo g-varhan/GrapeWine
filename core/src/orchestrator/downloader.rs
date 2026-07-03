@@ -41,8 +41,20 @@ where
     std::fs::create_dir_all(dest_dir)
         .map_err(|e| format!("Failed to create destination directory: {}", e))?;
 
-    // Try to find aria2c on system
-    let mut child = Command::new("aria2c")
+    // Try to find aria2c on system, fall back to ~/.local/bin/aria2c
+    let bin_path = if Command::new("aria2c").arg("--version").stdout(Stdio::null()).stderr(Stdio::null()).status().is_ok() {
+        "aria2c".to_string()
+    } else {
+        let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
+        let local_bin = home.join(".local").join("bin").join("aria2c");
+        if local_bin.exists() {
+            local_bin.to_string_lossy().to_string()
+        } else {
+            "aria2c".to_string() // fallback
+        }
+    };
+
+    let mut child = Command::new(bin_path)
         .arg("--enable-rpc=false")
         .arg("--seed-time=0")
         .arg("--bt-stop-timeout=120") // Timeout after 2 minutes of no seed/peer connection
